@@ -1,6 +1,8 @@
 import os, torch, argparse, datetime, random, numpy as np
 from util.runner import Runner
 
+# torchrun --standalone --nproc_per_node=2 train.py --method dsb --noiser flow --network adm --batch_size 8 --prior afhq-dog-256 --dataset afhq-cat-256 --val_prior afhq-dog-256 --val_data afhq-cat-256 --lr 1e-5 --repeat_per_epoch 32 --use_amp --training_timesteps 100 --inference_timesteps 100 --simplify --reparam term --gamma_type linear_1e-3_1e-2 --exp_name trdsb-afhq256
+# torchrun --standalone --nproc_per_node=8 train.py --method dsb --noiser flow --network adm --batch_size 128 --prior sketchy-sketch --dataset sketchy-photo-256 --val_prior sketchy-sketch-256 --val_data sketchy-photo-256 --lr 1e-5 --repeat_per_epoch 8 --use_amp --training_timesteps 100 --inference_timesteps 100 --simplify --reparam term --gamma_type linear_1e-3_1e-2 --exp_name trdsb-afhq256
 
 def seed_everything(seed):
     random.seed(seed)

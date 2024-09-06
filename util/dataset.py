@@ -4,8 +4,43 @@ from glob import glob
 from PIL import Image
 from torchvision import transforms
 from diffusers import AutoencoderKL
+from torch.utils.data import Dataset
+import os, time
 
-
+class SketchyDataset(Dataset):
+    def __init__(self, file_list_path="/root/app/sf/dataset/photo_train.txt", data_dir="/root/app/archived_proj/ZSE-SBIR/datasets/Sketchy",transform=None, stype=None):
+        with open(file_list_path, 'r') as f:
+            photo_path_list = f.readlines()
+        photo_path_list = [i.strip() for i in photo_path_list]
+        
+        self.photo_path_list = photo_path_list
+        self.data_dir = data_dir
+        self.transform = transform
+        self.stype = stype
+        
+    def __len__(self):
+        return len(self.photo_path_list)
+    
+    def __getitem__(self, index):
+        def get_sketchy_pair(photo_path):
+            sketch_path = (photo_path.rsplit('.', 1)[0] + '-1.' + photo_path.rsplit('.', 1)[1]).replace('photo', 'sketch').replace('jpg','png')
+            return photo_path, sketch_path
+        photo_path = self.photo_path_list[index]
+        photo_path, sketch_path = get_sketchy_pair(photo_path)
+        
+        photo_img = Image.open(os.path.join(self.data_dir, photo_path))
+        sketch_img = Image.open(os.path.join(self.data_dir, sketch_path))
+        if self.transform:
+            photo_img = self.transform(photo_img)
+            sketch_img = self.transform(sketch_img)
+        if self.stype == 'sketch':
+            return sketch_img.detach()
+        elif self.stype == 'photo':
+            return photo_img.detach()
+        else:
+            return photo_img, sketch_img
+        # return sketch_img, random.randint(0,9)
+        # return (sketch_img, photo_img), random.randint(0,9)
 class BaseDataset(torch.utils.data.Dataset):
     def __init__(self, size=10000, **kwargs):
         self.size = size
@@ -189,7 +224,7 @@ class DSBDataset(torch.utils.data.Dataset):
 
 
 class ImageAFHQDataset(torch.utils.data.Dataset):
-    def __init__(self, data_path, size=-1, random_flip=False,
+    def __init__(self, data_path=None, size=-1, random_flip=False,
                  resolution=64, center_crop=True, device=None):
         r"""
         Dataset for AFHQ dataset.
@@ -197,10 +232,22 @@ class ImageAFHQDataset(torch.utils.data.Dataset):
         data_path: str
             Path to the dataset, pre-built as a .png file
         """
+        import datasets
+        self.ds = datasets.load_dataset('huggan/AFHQ', split='train')
         self.data_path = data_path
-        self.imgs = sorted(glob(f"{data_path}/*.png") + glob(f"{data_path}/*.jpg"))
-        self.size = size if size > 0 else len(self.imgs)
-        self.random_flip = random_flip
+        # 0 for cat and 1 for dog
+        if 'cat' in data_path:
+            self.ds = self.ds.filter(lambda x: x['label'] == 0)
+        elif 'dog' in data_path:
+            self.ds = self.ds.filter(lambda x: x['label'] == 1)
+        # self.imgs = glob(f"{data_path}/*.png") + glob(f"{data_path}/*.jpg")
+        # sort the images
+        # self.imgs.sort()
+        # self.size = size if size > 0 else len(self.imgs)
+        self.size = len(self.ds)
+        print('self.ds: ', self.ds)
+
+        print(f"dataset size: {self.size}")
         self.device = device
 
         self.train_transforms = transforms.Compose(
@@ -222,11 +269,14 @@ class ImageAFHQDataset(torch.utils.data.Dataset):
         return self.size
 
     def __getitem__(self, idx):
-        img = Image.open(self.imgs[idx % len(self.imgs)])
-        img = img.convert("RGB")
+        # img = Image.open(self.imgs[idx % len(self.imgs)])
+        # img = img.convert("RGB")
+        img = self.ds[idx]['image']
         _data = self.train_transforms(img).to(self.device)
+        start = time.time()
         _data = self.vae.encode(_data.unsqueeze(0)).latent_dist.sample().cpu().squeeze(0) * self.vae.config.scaling_factor
-        return _data
+        print(f"vae encode cost:  {time.time() - start} for {_data.shape}")
+        return _data.detach()
 
 
 class ImageCelebADataset(torch.utils.data.Dataset):
@@ -238,11 +288,12 @@ class ImageCelebADataset(torch.utils.data.Dataset):
         data_path: str
             Path to the dataset, pre-built as a .png file
         """
-        self.data_path = data_path
-        self.imgs = glob(f"{data_path}/*.png") + glob(f"{data_path}/*.jpg")
+        # self.data_path = data_path
+        # self.imgs = glob(f"{data_path}/*.png") + glob(f"{data_path}/*.jpg")
         # sort the images
-        self.imgs.sort()
-        self.size = size if size > 0 else len(self.imgs)
+        # self.imgs.sort()
+        # self.size = size if size > 0 else len(self.imgs)
+        self.size = len(self.ds)
         self.random_flip = random_flip
         
         self.train_transforms = transforms.Compose(
@@ -259,12 +310,22 @@ class ImageCelebADataset(torch.utils.data.Dataset):
         return self.size
 
     def __getitem__(self, idx):
-        img = Image.open(self.imgs[idx % len(self.imgs)])
-        img = img.convert("RGB")
+        # img = Image.open(self.imgs[idx % len(self.imgs)])
+        # img = img.convert("RGB")
+        img = self.ds[idx]['image']
         _data = self.train_transforms(img)
         return _data
 
-
+def get_transform(resolution=256, random_flip=False, center_crop=True):
+    tr = transforms.Compose(
+            [
+                transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.CenterCrop(resolution) if center_crop else transforms.RandomCrop(resolution),
+                transforms.RandomHorizontalFlip() if random_flip else transforms.Lambda(lambda x: x),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ])
+    return tr
 def create_data(name, gpus=1, dataset_size=2**24, batch_size=2**16, random_flip=False, device=None):
     name = name.lower()
     if 'checkerboard' in name:
@@ -305,6 +366,10 @@ def create_data(name, gpus=1, dataset_size=2**24, batch_size=2**16, random_flip=
         dataset = ImageCelebADataset(
             'dataset/celeba64/',
             size=dataset_size, random_flip=random_flip)
+    elif 'sketchy-sketch' in name:
+        dataset = SketchyDataset(transform=get_transform(), stype='sketch')
+    elif 'sketchy-photo' in name:
+        dataset = SketchyDataset(transform=get_transform(), stype='photo')
     else:
         raise NotImplementedError(f"Dataset {name} not implemented")
 

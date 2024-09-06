@@ -1,0 +1,46 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "TorchRun: Distributed Training",
+            "type": "python",
+            "request": "launch",
+            "module": "torch.distributed.run",
+            "args": [
+                "--standalone",
+                "--nproc_per_node", "2",
+                "train.py",
+                "--method", "dsb",
+                "--noiser", "flow",
+                "--network", "adm",
+                "--batch_size", "4",
+                // "--batch_size", "32",
+                "--prior", "sketchy-photo-256",
+                "--dataset", "sketchy-sketch-256",
+                "--val_prior", "sketchy-photo-256",
+                "--val_data", "sketchy-sketch-256",
+                "--lr", "1e-5",
+                "--repeat_per_epoch", "4",
+                "--use_amp",
+                "--training_timesteps", "100",
+                "--inference_timesteps", "100",
+                "--simplify",
+                "--reparam", "term",
+                "--gamma_type", "linear_1e-3_1e-2",
+                "--exp_name", "trdsb-afhq256"
+            ],
+            "console": "integratedTerminal",
+            // "justMyCode": false
+        }
+    ]
+}

@@ -4,8 +4,8 @@ from util.noiser import create_noiser
 from util.model import create_model
 from util.logger import Logger
 from util.visualize import InferenceResultVisualizer, TrajectoryVisualizer
-
-
+from glob import glob
+import os
 class Runner():
     def __init__(self, args):
         self.args = args
@@ -80,9 +80,9 @@ class Runner():
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
 
         self.load_ckpt()
-
-        self.save_path = os.path.join('exp', self.args.exp_name)
-
+        index = len(glob("exp/*"))
+        self.save_path = os.path.join('exp', f"{self.args.exp_name}_{index:03d}")
+        os.makedirs(self.save_path, exist_ok=True)
         if self.args.global_rank == 0:
             self.evaluators = {
                 'Inference': InferenceResultVisualizer(self.args, self.device, save_path=self.save_path),
